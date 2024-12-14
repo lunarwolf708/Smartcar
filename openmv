@@ -1,14 +1,7 @@
-import struct
-import asyncio
-import aioble
-import bluetooth
-import sensor
+from BLE_CEEO import Yell, Listen
 import time
-
-# UUIDs and constants
-_EPSILON_SERVICE_UUID = bluetooth.UUID(0x1816)  # Custom UUID for epsilon broadcasting
-_ADV_INTERVAL_MS = 250_000  # Advertisement interval (microseconds)
-CAMERA_CENTER_X = 160.0 / 2.0  # Camera's horizontal center for 160x120 resolution
+import sensor
+import math
 
 # Initialize the camera sensor
 sensor.reset()
@@ -18,65 +11,46 @@ sensor.skip_frames(time=2000)
 sensor.set_auto_gain(False)  # Disable to prevent image washout
 sensor.set_auto_whitebal(False)  # Disable to prevent image washout
 
+# Define the horizontal center of the camera as a float
+CAMERA_CENTER_X = 160.0 / 2.0  # 80.0 for 160x120 resolution
+
 def calculate_epsilon():
-    """Detects AprilTags and calculates epsilon."""
+    """
+    Calculate the epsilon value based on the distance between the AprilTag
+    and the horizontal center of the camera.
+    """
     img = sensor.snapshot()
-
     for tag in img.find_apriltags():
-        # Draw rectangle and cross on detected tag
-        img.draw_rectangle(tag.rect(), color=(255, 0, 0))
-        img.draw_cross(tag.cx(), tag.cy(), color=(0, 255, 0))
-
-        # Calculate epsilon value (distance from center)
-        epsilon = tag.cx() - CAMERA_CENTER_X
+        epsilon = tag.cx - CAMERA_CENTER_X  # Calculate distance from center
         return epsilon
+    return None  # Return None if no tag is found
 
-    return None  # No tag detected
+def peripheral(name): 
+    try:
+        p = Yell(name, interval_us=300, verbose=True)
+        if p.connect_up():
+            print('P connected')
+            time.sleep(2)
 
-def create_advertisement_payload(name, service_uuid, epsilon):
-    """Manually creates an advertisement payload."""
-    payload = bytearray()
+            while True:
+                epsilon = calculate_epsilon()
+                if epsilon is not None:
+                    payload = f"{epsilon:.2f}"  # Format epsilon value to 2 decimal places
+                    p.send(payload)
+                    print(f"Broadcasting epsilon: {payload}")
+                
+                if p.is_any:
+                    print(p.read())
 
-    # Add device name
-    name_bytes = name.encode('utf-8')
-    payload.extend([len(name_bytes) + 1, 0x09])  # Length + Type (Complete Local Name)
-    payload.extend(name_bytes)
+                if not p.is_connected:
+                    print('lost connection')
+                    break
 
-    # Add service UUID
-    uuid_bytes = service_uuid.to_bytes(16, 'little')
-    payload.extend([len(uuid_bytes) + 1, 0x07])  # Length + Type (Complete List of 128-bit UUIDs)
-    payload.extend(uuid_bytes)
+                time.sleep(0.1)
+    except Exception as e:
+        print(e)
+    finally:
+        p.disconnect()
+        print('closing up')
 
-    # Add manufacturer-specific data for epsilon
-    epsilon_data = struct.pack("<f", epsilon)  # Encode epsilon as float
-    payload.extend([len(epsilon_data) + 1, 0xFF])  # Length + Type (Manufacturer Specific Data)
-    payload.extend(epsilon_data)
-
-    return payload
-
-# Task to broadcast epsilon value
-async def broadcaster_task():
-    while True:
-        # Calculate epsilon
-        epsilon = calculate_epsilon()
-
-        if epsilon is not None:
-            # Create advertisement payload
-            adv_data = create_advertisement_payload("Driver", _EPSILON_SERVICE_UUID, epsilon)
-
-            # Start broadcasting
-            async with await aioble.advertise(
-                _ADV_INTERVAL_MS,
-                adv_data=adv_data,
-            ):
-                print(f"Broadcasting epsilon: {epsilon}")
-                await asyncio.sleep(1)  # Adjust based on required broadcast frequency
-        else:
-            print("No AprilTag detected. Not broadcasting.")
-            await asyncio.sleep(0.5)
-
-# Main entry point
-async def main():
-    await asyncio.gather(broadcaster_task())
-
-asyncio.run(main())
+peripheral('Maria')
