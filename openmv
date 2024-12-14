@@ -29,7 +29,7 @@ def peripheral(name):
     try:
         p = Yell(name, interval_us=300, verbose=True)
         if p.connect_up():
-            print('P connected')
+            print('Driver connected')
             time.sleep(2)
 
             while True:
@@ -53,4 +53,4 @@ def peripheral(name):
         p.disconnect()
         print('closing up')
 
-peripheral('Maria')
+peripheral('Lucy')
