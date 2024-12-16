@@ -1,15 +1,16 @@
-from BLE_CEEO import Listen
 import time
 import motor_pair
 from hub import port
+from BLE_CEEO import Listen
 
 # Constants
-Kp = 0.5  # Proportional gain
-base_speed = 500  # Base motor speed
+Kp = 0.3 
+base_speed = 150  
 
 # Pair motors on ports A and B
 motor_pair.unpair(motor_pair.PAIR_1)  # Remove any old pairing
 motor_pair.pair(motor_pair.PAIR_1, port.A, port.B)
+
 def central(name):   
     try:   
         L = Listen(name, verbose=True)
@@ -27,8 +28,12 @@ def central(name):
                         
                         # Calculate motor speeds using proportional control
                         correction = int(Kp * epsilon)  # Ensure correction is an integer
-                        left_speed = int(base_speed - correction)
-                        right_speed = int(base_speed + correction)
+                        left_speed = int(base_speed + correction)
+                        right_speed = int(base_speed - correction)
+
+                        # Debugging outputs
+                        print(f"epsilon: {epsilon}, correction: {correction}")
+                        print(f"left_speed: {left_speed}, right_speed: {right_speed}")
                         
                         # Apply motor speeds
                         motor_pair.move_tank(motor_pair.PAIR_1, left_speed, right_speed)
@@ -42,7 +47,7 @@ def central(name):
                     except ValueError as ve:
                         print(f"Invalid epsilon value received: {ve}")
                 
-                time.sleep(0.1)  # Prevent busy looping
+                time.sleep(0.5)  # Prevent busy looping
     except Exception as e:
         print(e)
     finally:
